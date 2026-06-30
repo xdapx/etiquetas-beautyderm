@@ -151,40 +151,25 @@
         const orderMatch = text.match(/Pedido\s*#?\s*(\d+)/i) || text.match(/#\s*(\d+)/);
         if (orderMatch) newOrder.orderId = orderMatch[1];
 
-        // 2. Encontrar Teléfono (asumiendo +54 o similar)
-        const phoneMatch = text.match(/\+54\s?\d{9,11}/) || text.match(/Teléfono\s*[:\n]\s*([\+\d\s]+)/i);
+        // 2. Encontrar Teléfono — regex flexible para manejar espacios del OCR
+        const phoneMatch = text.match(/\+54[\d\s]{8,14}/) || text.match(/Teléfono\s*[:\n]\s*([\+\d\s]+)/i);
         if (phoneMatch) {
-          newOrder.phone = phoneMatch[1] || phoneMatch[0];
-        } else {
-          // Buscar en las lineas una que parezca telefono
-          const pLine = lines.find(l => l.includes('+54'));
-          if (pLine) newOrder.phone = pLine.match(/\+54\d+/)?.[0] || pLine;
+          newOrder.phone = (phoneMatch[1] || phoneMatch[0]).replace(/\s+/g, '').trim();
         }
 
-        // 3. Encontrar Nombre y Dirección
-        let shippingIdx = lines.findIndex(l => l.toLowerCase().includes('detalles de envío') || l.toLowerCase().includes('detalles de envio'));
-
-        // Si no hay detalles de envío, buscamos los de facturación (común en retiros en sucursal)
+        // 3. Encontrar Nombre y Dirección desde "Detalles de envío"
+        // Línea +1 = nombre, líneas +2 y +3 = dirección (exactamente esas, nada más)
+        let shippingIdx = lines.findIndex(l => /detalles de env[íi]o/i.test(l));
         if (shippingIdx === -1) {
-          shippingIdx = lines.findIndex(l => l.toLowerCase().includes('detalles de facturación') || l.toLowerCase().includes('detalles de facturacion'));
+          shippingIdx = lines.findIndex(l => /detalles de facturaci[oó]n/i.test(l));
         }
 
-        if (shippingIdx !== -1 && lines.length > shippingIdx + 1) {
-          // Prevención por si el escáner une el título y el nombre en la misma línea
-          if (lines[shippingIdx].length > 30) {
-            newOrder.name = lines[shippingIdx].replace(/detalles de (envío|envio|facturación|facturacion)/i, '').trim();
-            shippingIdx--; // Ajustamos el índice para leer la dirección correctamente
-          } else {
-            newOrder.name = lines[shippingIdx + 1];
-          }
-
-          let addrParts = [];
-          for (let i = shippingIdx + 2; i < lines.length; i++) {
-            const lower = lines[i].toLowerCase();
-            if (lower.includes('correo') || lower.includes('teléfono') || lower.includes('método') || lower.includes('@')) break;
-            addrParts.push(lines[i]);
-          }
-          newOrder.address = addrParts.join('\n'); // Mantener saltos de línea para la dirección
+        if (shippingIdx !== -1) {
+          if (lines[shippingIdx + 1]) newOrder.name = lines[shippingIdx + 1];
+          const addrParts = [];
+          if (lines[shippingIdx + 2]) addrParts.push(lines[shippingIdx + 2]);
+          if (lines[shippingIdx + 3]) addrParts.push(lines[shippingIdx + 3]);
+          newOrder.address = addrParts.join('\n');
         }
 
         // 4. Encontrar Productos
