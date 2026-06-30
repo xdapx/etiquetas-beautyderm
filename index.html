@@ -152,23 +152,41 @@
         if (orderMatch) newOrder.orderId = orderMatch[1];
 
         // 2. Encontrar Teléfono — regex flexible para manejar espacios del OCR
-        const phoneMatch = text.match(/\+54[\d\s]{8,14}/) || text.match(/Teléfono\s*[:\n]\s*([\+\d\s]+)/i);
+        const phoneMatch = text.match(/\+54[\d\s]{8,14}/) || text.match(/Tel[eé]fono\s*[:\n]\s*([\+\d\s]+)/i);
         if (phoneMatch) {
           newOrder.phone = (phoneMatch[1] || phoneMatch[0]).replace(/\s+/g, '').trim();
         }
 
         // 3. Encontrar Nombre y Dirección desde "Detalles de envío"
-        // Línea +1 = nombre, líneas +2 y +3 = dirección (exactamente esas, nada más)
-        let shippingIdx = lines.findIndex(l => /detalles de env[íi]o/i.test(l));
-        if (shippingIdx === -1) {
-          shippingIdx = lines.findIndex(l => /detalles de facturaci[oó]n/i.test(l));
-        }
+        // El OCR de dos columnas puede: (a) poner ambos headings seguidos, y
+        // (b) duplicar cada línea de datos (left+right column merged). Se maneja abajo.
+        const isEnvioHdr = l => /detalles\s+de\s+env/i.test(l);
+        const isFactHdr  = l => /detalles\s+de\s+factur/i.test(l);
+        // Quita duplicación de datos "Nombre Nombre" → "Nombre"
+        const dedup = s => {
+          const w = s.split(/\s+/);
+          if (w.length >= 2 && w.length % 2 === 0) {
+            const half = w.length / 2;
+            const a = w.slice(0, half).join(' ');
+            const b = w.slice(half).join(' ');
+            if (a === b) return a;
+          }
+          return s;
+        };
+
+        let shippingIdx = lines.findIndex(isEnvioHdr);
+        if (shippingIdx === -1) shippingIdx = lines.findIndex(isFactHdr);
 
         if (shippingIdx !== -1) {
-          if (lines[shippingIdx + 1]) newOrder.name = lines[shippingIdx + 1];
+          // Avanzar más allá de cabeceras consecutivas (layout 2 columnas)
+          let dataStart = shippingIdx + 1;
+          while (dataStart < lines.length && (isEnvioHdr(lines[dataStart]) || isFactHdr(lines[dataStart]))) {
+            dataStart++;
+          }
+          if (lines[dataStart])     newOrder.name = dedup(lines[dataStart]);
           const addrParts = [];
-          if (lines[shippingIdx + 2]) addrParts.push(lines[shippingIdx + 2]);
-          if (lines[shippingIdx + 3]) addrParts.push(lines[shippingIdx + 3]);
+          if (lines[dataStart + 1]) addrParts.push(dedup(lines[dataStart + 1]));
+          if (lines[dataStart + 2]) addrParts.push(dedup(lines[dataStart + 2]));
           newOrder.address = addrParts.join('\n');
         }
 
