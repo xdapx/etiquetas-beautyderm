@@ -151,27 +151,28 @@
         const orderMatch = text.match(/Pedido\s*#?\s*(\d+)/i) || text.match(/#\s*(\d+)/);
         if (orderMatch) newOrder.orderId = orderMatch[1];
 
-        // 2. Encontrar Teléfono — regex flexible para manejar espacios del OCR
-        const phoneMatch = text.match(/\+54[\d\s]{8,14}/) || text.match(/Tel[eé]fono\s*[:\n]\s*([\+\d\s]+)/i);
-        if (phoneMatch) {
-          newOrder.phone = (phoneMatch[1] || phoneMatch[0]).replace(/\s+/g, '').trim();
-        }
+        // 2. Encontrar Teléfono
+        const rawPhone = text.match(/\+54[\d\s\-]{8,15}/)?.[0]
+          || text.match(/Tel[eé]fono[^\n]*[\n:]\s*([\+\d][\d\s\-]{7,14})/i)?.[1];
+        if (rawPhone) newOrder.phone = rawPhone.replace(/[^\d+]/g, '');
 
         // 3. Encontrar Nombre y Dirección desde "Detalles de envío"
-        // El OCR de dos columnas puede: (a) poner ambos headings seguidos, y
-        // (b) duplicar cada línea de datos (left+right column merged). Se maneja abajo.
         const isEnvioHdr = l => /detalles\s+de\s+env/i.test(l);
         const isFactHdr  = l => /detalles\s+de\s+factur/i.test(l);
-        // Quita duplicación de datos "Nombre Nombre" → "Nombre"
+
+        // El OCR en layout 2 columnas fusiona left+right por fila y puede perder
+        // el primer carácter de la segunda copia: "Laura Gonzalez aura Gonzalez".
+        // Busca el punto de corte donde segunda mitad ≈ primera mitad (con 1 char de tolerancia).
         const dedup = s => {
-          const w = s.split(/\s+/);
-          if (w.length >= 2 && w.length % 2 === 0) {
-            const half = w.length / 2;
-            const a = w.slice(0, half).join(' ');
-            const b = w.slice(half).join(' ');
-            if (a === b) return a;
+          const w = s.trim().split(/\s+/);
+          for (let i = 1; i < w.length; i++) {
+            const a = w.slice(0, i).join(' ');
+            const b = w.slice(i).join(' ');
+            if (a.length < 3 || b.length < 3) continue;
+            const aL = a.toLowerCase(), bL = b.toLowerCase();
+            if (aL === bL || aL.slice(1) === bL || bL.slice(1) === aL) return a;
           }
-          return s;
+          return s.trim();
         };
 
         let shippingIdx = lines.findIndex(isEnvioHdr);
