@@ -13,7 +13,7 @@
   <div id="root"></div>
 
   <script type="text/babel" data-presets="react">
-    const { useState, useEffect, useRef } = React;
+    const { useState } = React;
 
     // Iconos (SVG de lucide, embebidos para funcionar sin internet)
     const mkIcon = (paths) => ({ size = 24, className = '' }) => (
@@ -21,21 +21,15 @@
         fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
         className={className} dangerouslySetInnerHTML={{ __html: paths }} />
     );
-    const Upload    = mkIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>');
     const Printer   = mkIcon('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>');
-    const ImageIcon = mkIcon('<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>');
     const Plus      = mkIcon('<path d="M5 12h14"/><path d="M12 5v14"/>');
     const Trash2    = mkIcon('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>');
     const Edit3     = mkIcon('<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>');
-    const Loader2   = mkIcon('<path d="M21 12a9 9 0 1 1-6.219-8.56"/>');
-    const Clipboard = mkIcon('<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>');
     const Store     = mkIcon('<path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/>');
     const Truck     = mkIcon('<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>');
     const Bike      = mkIcon('<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>');
 
     function App() {
-      const [loading, setLoading] = useState(false);
-      const [logo, setLogo] = useState(null);
       const [formData, setFormData] = useState({
         orderId: '',
         name: '',
@@ -44,184 +38,6 @@
         products: [],
         deliveryMethod: 'envio' // 'envio', 'retiro' o 'motoapp'
       });
-
-      // Cargar el logo desde el almacenamiento local al iniciar
-      useEffect(() => {
-        const savedLogo = localStorage.getItem('beautyDermLogo');
-        if (savedLogo) setLogo(savedLogo);
-      }, []);
-
-      // Función para cargar el script de Tesseract.js (para leer imágenes — requiere internet la primera vez)
-      const loadTesseract = () => {
-        return new Promise((resolve, reject) => {
-          if (window.Tesseract) {
-            resolve(window.Tesseract);
-            return;
-          }
-          const script = document.createElement('script');
-          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-          script.onload = () => resolve(window.Tesseract);
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-      };
-
-      // Manejar la subida del logo y guardarlo
-      const handleLogoUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const base64 = e.target.result;
-          setLogo(base64);
-          localStorage.setItem('beautyDermLogo', base64);
-        };
-        reader.readAsDataURL(file);
-      };
-
-      // Procesar cualquier archivo de imagen (ya sea subido o pegado)
-      const processImageFile = async (file) => {
-        if (!file) return;
-
-        setLoading(true);
-        try {
-          const tesseract = await loadTesseract();
-          const worker = await tesseract.createWorker('spa');
-
-          const reader = new FileReader();
-          reader.onload = async (event) => {
-            try {
-              const ret = await worker.recognize(event.target.result);
-              parseOrderText(ret.data.text);
-              await worker.terminate();
-            } catch (err) {
-              console.error("Error leyendo imagen:", err);
-              alert("Hubo un error leyendo la imagen. Por favor ingresa los datos a mano.");
-            } finally {
-              setLoading(false);
-            }
-          };
-          reader.readAsDataURL(file);
-        } catch (err) {
-          console.error("Error cargando Tesseract:", err);
-          alert("No se pudo cargar el lector de imágenes. La lectura de capturas necesita conexión a internet.");
-          setLoading(false);
-        }
-      };
-
-      // Manejar la subida manual desde el botón
-      const handleOrderImageUpload = (e) => {
-        processImageFile(e.target.files[0]);
-      };
-
-      // Escuchar el evento de pegar (Ctrl+V) en toda la ventana
-      useEffect(() => {
-        const handlePaste = (e) => {
-          // Buscar si entre lo que se pegó hay una imagen
-          const items = e.clipboardData?.items;
-          if (!items) return;
-
-          for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
-              const file = items[i].getAsFile();
-              processImageFile(file);
-              break; // Solo tomar la primera imagen
-            }
-          }
-        };
-
-        window.addEventListener('paste', handlePaste);
-        return () => window.removeEventListener('paste', handlePaste);
-      }, []);
-
-      // Lógica para encontrar los datos en el texto escaneado
-      const parseOrderText = (text) => {
-        const lines = text.split('\n').map(l => l.trim()).filter(l => l);
-        let newOrder = { orderId: '', name: '', address: '', phone: '', products: [], deliveryMethod: 'envio' };
-
-        // 0. Detectar Método de Envío Automáticamente
-        const lowerText = text.toLowerCase();
-        if (lowerText.includes('moto') || lowerText.includes('rappi') || lowerText.includes('pedidosya') || lowerText.includes('uber') || lowerText.includes('cabify')) {
-          newOrder.deliveryMethod = 'motoapp';
-        } else if (lowerText.includes('retiro') || lowerText.includes('sucursal') || lowerText.includes('local')) {
-          newOrder.deliveryMethod = 'retiro';
-        }
-
-        // 1. Encontrar Número de Pedido
-        const orderMatch = text.match(/Pedido\s*#?\s*(\d+)/i) || text.match(/#\s*(\d+)/);
-        if (orderMatch) newOrder.orderId = orderMatch[1];
-
-        // 2. Encontrar Teléfono
-        const rawPhone = text.match(/\+54[\d\s\-]{8,15}/)?.[0]
-          || text.match(/Tel[eé]fono[^\n]*[\n:]\s*([\+\d][\d\s\-]{7,14})/i)?.[1];
-        if (rawPhone) newOrder.phone = rawPhone.replace(/[^\d+]/g, '');
-
-        // 3. Encontrar Nombre y Dirección desde "Detalles de envío"
-        const isEnvioHdr = l => /detalles\s+de\s+env/i.test(l);
-        const isFactHdr  = l => /detalles\s+de\s+factur/i.test(l);
-
-        // El OCR en layout 2 columnas fusiona left+right por fila y puede perder
-        // el primer carácter de la segunda copia: "Laura Gonzalez aura Gonzalez".
-        // Busca el punto de corte donde segunda mitad ≈ primera mitad (con 1 char de tolerancia).
-        const dedup = s => {
-          const w = s.trim().split(/\s+/);
-          for (let i = 1; i < w.length; i++) {
-            const a = w.slice(0, i).join(' ');
-            const b = w.slice(i).join(' ');
-            if (a.length < 3 || b.length < 3) continue;
-            const aL = a.toLowerCase(), bL = b.toLowerCase();
-            if (aL === bL || aL.slice(1) === bL || bL.slice(1) === aL) return a;
-          }
-          return s.trim();
-        };
-
-        let shippingIdx = lines.findIndex(isEnvioHdr);
-        if (shippingIdx === -1) shippingIdx = lines.findIndex(isFactHdr);
-
-        if (shippingIdx !== -1) {
-          // Avanzar más allá de cabeceras consecutivas (layout 2 columnas)
-          let dataStart = shippingIdx + 1;
-          while (dataStart < lines.length && (isEnvioHdr(lines[dataStart]) || isFactHdr(lines[dataStart]))) {
-            dataStart++;
-          }
-          if (lines[dataStart])     newOrder.name = dedup(lines[dataStart]);
-          const addrParts = [];
-          if (lines[dataStart + 1]) addrParts.push(dedup(lines[dataStart + 1]));
-          if (lines[dataStart + 2]) addrParts.push(dedup(lines[dataStart + 2]));
-          newOrder.address = addrParts.join('\n');
-        }
-
-        // 4. Encontrar Productos
-        const prodIdx = lines.findIndex(l => l.toLowerCase().includes('producto') && (l.toLowerCase().includes('cantidad') || l.toLowerCase().includes('total')));
-        if (prodIdx !== -1) {
-          for (let i = prodIdx + 1; i < lines.length; i++) {
-            const line = lines[i];
-            if (line.toLowerCase().includes('completado') || line.toLowerCase().includes('editar') || line.toLowerCase().includes('pago')) break;
-
-            // Buscar patrón: Nombre del producto seguido de un número suelto (cantidad)
-            const match = line.match(/^(.*?)\s+(\d+)\s*\$/);
-            if (match) {
-              newOrder.products.push({ name: match[1].trim(), qty: match[2] });
-            } else {
-              // Intento secundario si la línea no tiene el signo $
-              const parts = line.split(/\s+/);
-              const maybeQty = parts[parts.length - 1];
-              if (!isNaN(maybeQty) && line.length > 5 && !line.includes('1019')) {
-                newOrder.products.push({ name: line.replace(maybeQty, '').trim(), qty: maybeQty });
-              } else if (line.toLowerCase().includes('latisse')) {
-                newOrder.products.push({ name: line, qty: '1' });
-              }
-            }
-          }
-        }
-
-        // Si no encontró productos, ponemos uno vacío para rellenar
-        if (newOrder.products.length === 0) {
-          newOrder.products = [{ name: '', qty: '1' }];
-        }
-
-        setFormData(newOrder);
-      };
 
       const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -288,45 +104,9 @@
                 <Edit3 className="text-blue-600" /> Creador de Etiquetas
               </h1>
 
-              {/* Configuración de Logo */}
-              <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">1. Tu Logo (Se guarda automáticamente)</label>
-                <div className="flex items-center gap-4">
-                  {logo ? (
-                    <img src={logo} alt="Logo" className="h-12 w-auto object-contain bg-white border p-1 rounded" />
-                  ) : (
-                    <div className="h-12 w-32 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">Sin logo</div>
-                  )}
-                  <label className="cursor-pointer bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md hover:bg-gray-50 text-sm flex items-center gap-2">
-                    <ImageIcon size={16} /> Cambiar Logo
-                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-                  </label>
-                </div>
-              </div>
-
-              {/* Escáner de Pedido */}
-              <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-3 opacity-10">
-                  <Clipboard size={64} />
-                </div>
-                <label className="block text-sm font-semibold text-blue-900 mb-2">2. Cargar datos del Pedido</label>
-                <p className="text-sm text-blue-800 mb-3 font-medium">
-                  ¡Puedes hacer <kbd className="bg-white border border-gray-300 rounded px-1.5 py-0.5 text-xs">Ctrl</kbd> + <kbd className="bg-white border border-gray-300 rounded px-1.5 py-0.5 text-xs">V</kbd> en cualquier parte de esta pantalla para pegar la captura!
-                </p>
-
-                <div className="flex items-center gap-2 mt-4 relative z-10">
-                  <span className="text-xs text-blue-700 font-semibold uppercase">O usa el botón:</span>
-                  <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center justify-center gap-2 transition-colors shadow-sm">
-                    {loading ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
-                    {loading ? "Leyendo..." : "Seleccionar archivo"}
-                    <input type="file" accept="image/*" onChange={handleOrderImageUpload} className="hidden" disabled={loading} />
-                  </label>
-                </div>
-              </div>
-
               {/* Formulario Manual */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">3. Revisar y Editar Datos</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Datos del Pedido</h3>
 
                 {/* Método de Entrega */}
                 <div className="mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
@@ -347,15 +127,9 @@
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Nº Pedido</label>
-                    <input type="text" name="orderId" value={formData.orderId} onChange={handleInputChange} className="w-full border rounded-md p-2 text-gray-800 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Ej: 22467" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Teléfono</label>
-                    <input type="text" name="phone" value={formData.phone} onChange={handleInputChange} className="w-full border rounded-md p-2 text-gray-800 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="+5411..." />
-                  </div>
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Nº Pedido</label>
+                  <input type="text" name="orderId" value={formData.orderId} onChange={handleInputChange} className="w-full border rounded-md p-2 text-gray-800 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Ej: 22467" />
                 </div>
 
                 <div className="mb-4">
@@ -368,6 +142,11 @@
                     {formData.deliveryMethod === 'envio' ? 'Dirección de Envío' : 'Datos de Facturación'}
                   </label>
                   <textarea name="address" value={formData.address} onChange={handleInputChange} rows="3" className="w-full border rounded-md p-2 text-gray-800 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none" placeholder="Calle, Número, Piso, Barrio..."></textarea>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Teléfono</label>
+                  <input type="text" name="phone" value={formData.phone} onChange={handleInputChange} className="w-full border rounded-md p-2 text-gray-800 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="+5411..." />
                 </div>
 
                 <div className="mb-4">
@@ -408,19 +187,15 @@
 
                   {/* Header con Logo */}
                   <div className="h-24 flex items-center justify-center mb-4 border-b-2 border-black pb-3 shrink-0">
-                    {logo ? (
-                      <img src={logo} alt="Beauty Derm" className="h-full object-contain" />
-                    ) : (
-                      <div className="text-center">
-                        <h1 className="text-4xl font-extrabold tracking-tighter" style={{ fontFamily: 'system-ui, sans-serif' }}>beauty<span className="font-light">derm</span></h1>
-                        <p className="text-[8px] tracking-[0.2em] uppercase mt-1">Centro Médico Estético</p>
-                      </div>
-                    )}
+                    <div className="text-center">
+                      <h1 className="text-4xl font-extrabold tracking-tighter" style={{ fontFamily: 'system-ui, sans-serif' }}>beauty<span className="font-light">derm</span></h1>
+                      <p className="text-[8px] tracking-[0.2em] uppercase mt-1">Centro Médico Estético</p>
+                    </div>
                   </div>
 
                   {/* Número de Pedido */}
                   <div className="mb-4 shrink-0">
-                    <h2 className="text-2xl font-extrabold text-black">
+                    <h2 className="text-2xl font-extrabold text-black text-center">
                       {formData.orderId ? `PEDIDO #${formData.orderId}` : 'PEDIDO #------'}
                     </h2>
                   </div>
@@ -447,9 +222,9 @@
                     <p className={`font-bold leading-tight uppercase text-center ${formData.deliveryMethod === 'motoapp' ? 'text-2xl mt-4 mb-2' : 'text-base'}`}>
                       {formData.name || 'NOMBRE DEL CLIENTE'}
                     </p>
-                    {formData.deliveryMethod !== 'motoapp' && (
+                    {formData.deliveryMethod === 'envio' && (
                       <p className="text-sm font-medium leading-tight whitespace-pre-wrap mt-1 text-gray-800 text-center">
-                        {formData.address || (formData.deliveryMethod === 'envio' ? 'Dirección de envío...' : 'Datos de facturación...')}
+                        {formData.address || 'Dirección de envío...'}
                       </p>
                     )}
                   </div>
